@@ -1,0 +1,20 @@
+Source: apfsprogs
+Section: otherfs
+Priority: optional
+Maintainer: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+Rules-Requires-Root: no
+Build-Depends:
+ debhelper-compat (= 13),
+Standards-Version: 4.6.1
+Homepage: https://github.com/linux-apfs/apfsprogs
+Vcs-Browser: https://gitlab.com/kaisenlinux/packages/apfsprogs
+Vcs-Git: https://gitlab.com/kaisenlinux/packages/apfsprogs.git
+
+Package: apfsprogs
+Architecture: amd64 arm64 i386
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Suggests: apfs-fuse
+Description: Experimental APFS tools for linux
+ This package provides the mkfs and the fcsk tools for the APFS filesystem

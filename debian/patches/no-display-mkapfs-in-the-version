@@ -1,0 +1,13 @@
+Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+
+--- apfsprogs-20221226.orig/mkapfs/mkapfs.c
++++ apfsprogs-20221226/mkapfs/mkapfs.c
+@@ -36,7 +36,7 @@ static void usage(void)
+  */
+ static void version(void)
+ {
+-	printf("mkapfs version 0.1\n");
++	printf("mkfs.apfs version 0.1\n");
+ 	exit(1);
+ }
+ 

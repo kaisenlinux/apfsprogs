@@ -1,0 +1,5 @@
+apfsprogs (20221226-1kaisen) kaisen-packages; urgency=medium
+
+  * First packaging for Kaisen Linux
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Mon, 26 Dec 2022 03:02:48 +0100

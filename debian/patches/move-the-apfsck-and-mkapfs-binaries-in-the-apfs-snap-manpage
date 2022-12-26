@@ -1,0 +1,11 @@
+Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+--- apfsprogs-20221226.orig/apfs-snap/apfs-snap.8
++++ apfsprogs-20221226/apfs-snap/apfs-snap.8
+@@ -28,5 +28,5 @@ Please report bugs via email or, if pref
+ .SH AUTHOR
+ Written by Ernesto A. Fernández <ernesto@corellium.com>.
+ .SH SEE ALSO
+-.BR apfsck (8),
+-.BR mkapfs (8)
++.BR fsck.apfs (8),
++.BR mkfs.apfs (8)

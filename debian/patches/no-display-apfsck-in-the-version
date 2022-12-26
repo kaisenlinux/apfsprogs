@@ -1,0 +1,13 @@
+Author: Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>
+
+--- apfsprogs-20221226.orig/apfsck/apfsck.c
++++ apfsprogs-20221226/apfsck/apfsck.c
+@@ -31,7 +31,7 @@ static void usage(void)
+  */
+ static void version(void)
+ {
+-	printf("apfsck version 0.1\n");
++	printf("fsck.apfs version 0.1\n");
+ 	exit(1);
+ }
+ 
