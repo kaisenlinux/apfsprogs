@@ -1,3 +1,10 @@
+apfsprogs (20230226-1kaisen) kaisen-packages; urgency=medium
+
+  * Import new Git commits
+  * Use synlinks instead of quilt patchs for apfsck and mkapfs
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Sun, 26 Feb 2023 00:50:41 +0100
+
 apfsprogs (20221226-1kaisen) kaisen-packages; urgency=medium
 
   * First packaging for Kaisen Linux
