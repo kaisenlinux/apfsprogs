@@ -788,6 +788,10 @@ void read_volume_super(int vol, struct volume_superblock *vsb, struct object *ob
 				(APFS_OBJ_PHYSICAL | APFS_OBJECT_TYPE_BTREE))
 		report("Volume superblock", "wrong type for snapshot tree.");
 
+	/* The official fsck performs this one check on these two fields */
+	if (le64_to_cpu(vsb->v_raw->apfs_total_blocks_freed) > le64_to_cpu(vsb->v_raw->apfs_total_blocks_alloced))
+		report("Volume superblock", "more blocks freed than ever alloced.");
+
 	if (le16_to_cpu(vsb->v_raw->reserved) != 0)
 		report("Volume superblock", "reserved field is in use.");
 	if (le64_to_cpu(vsb->v_raw->apfs_root_to_xid) != 0)
@@ -894,8 +898,8 @@ struct volume_superblock *alloc_volume_super(bool snap)
 	if (!snap) {
 		ret->v_omap_table = alloc_htable();
 		ret->v_snap_table = alloc_htable();
+		ret->v_extent_table = alloc_htable();
 	}
-	ret->v_extent_table = alloc_htable();
 	ret->v_cnid_table = alloc_htable();
 	ret->v_dstream_table = alloc_htable();
 	ret->v_inode_table = alloc_htable();
@@ -987,11 +991,13 @@ void check_volume_super(void)
 	vsb->v_dstream_table = NULL;
 	free_cnid_table(vsb->v_cnid_table);
 	vsb->v_cnid_table = NULL;
-	free_extent_table(vsb->v_extent_table);
-	vsb->v_extent_table = NULL;
 	if (!vsb->v_in_snapshot) {
+		free_extent_table(vsb->v_extent_table);
+		vsb->v_extent_table = NULL;
 		free_omap_table(vsb->v_omap_table);
 		vsb->v_omap_table = NULL;
+	} else {
+		check_and_reset_extent_table(vsb->v_extent_table);
 	}
 	free_dirstat_table(vsb->v_dirstat_table);
 	vsb->v_dirstat_table = NULL;
