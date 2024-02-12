@@ -21,9 +21,6 @@ struct parameters {
 	bool		norm_sensitive;	/* Is it normalization-sensitive? */
 };
 
-/* String to identify the program and its version */
-#define MKFS_ID_STRING	"mkapfs for linux, version 0.1"
-
 /* Hardcoded transaction ids */
 #define MKFS_XID	1
 
@@ -49,16 +46,15 @@ struct parameters {
  * should actually change with the container size.
  */
 #define IP_BMAP_BASE	21000				/* First ip bitmap */
-#define IP_BMAP_BLOCKS	16				/* Ip bitmap count */
-#define IP_BASE		(IP_BMAP_BASE + IP_BMAP_BLOCKS)	/* Start of pool */
 
 /* Hardcoded block numbers */
 #define CPOINT_MAP_BNO			CPOINT_DESC_BASE
 #define CPOINT_SB_BNO			(CPOINT_DESC_BASE + 1)
 #define REAPER_BNO			CPOINT_DATA_BASE
-#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 1)
-#define	IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
-#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 3)
+#define IP_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 1)
+#define MAIN_FREE_QUEUE_BNO		(CPOINT_DATA_BASE + 2)
+/* Spaceman comes last because it could need 2 blocks */
+#define SPACEMAN_BNO			(CPOINT_DATA_BASE + 3)
 #define MAIN_OMAP_BNO			20000
 #define MAIN_OMAP_ROOT_BNO		20001
 #define FIRST_VOL_BNO			20002

@@ -387,7 +387,7 @@ static void node_free(struct node *node)
 {
 	if (node_is_root(node))
 		return;	/* The root nodes are needed by the sb until the end */
-	munmap(node->raw, sb->s_blocksize);
+	munmap(node->raw, node->object.size);
 	free(node->free_key_bmap);
 	free(node->free_val_bmap);
 	free(node->used_key_bmap);
@@ -677,12 +677,12 @@ static void free_omap_record_list(struct htable_entry *entry)
 				struct apfs_obj_phys *raw = NULL;
 				struct object obj = {0};
 
-				raw = read_object_nocheck(curr_rec->bno, &obj);
+				raw = read_object_nocheck(curr_rec->bno, sb->s_blocksize, &obj);
 				if (obj.type != APFS_OBJECT_TYPE_SNAP_META_EXT || obj.subtype != APFS_OBJECT_TYPE_INVALID)
 					report("Leaked omap record", "unexpected object type.");
 				container_bmap_mark_as_used(curr_rec->bno, 1);
 				++vsb->v_block_count;
-				munmap(raw, sb->s_blocksize);
+				munmap(raw, obj.size);
 			} else {
 				report("Omap record", "oid-xid combination is never used.");
 			}
@@ -1094,6 +1094,9 @@ static void check_btree_footer(struct btree *btree)
 		report(ctx, "wrong node count in info footer.");
 
 	if (btree_is_omap(btree)) {
+		u32 longest_key = le32_to_cpu(info->bt_longest_key);
+		u32 longest_val = le32_to_cpu(info->bt_longest_val);
+
 		if (le32_to_cpu(info->bt_fixed.bt_key_size) !=
 					sizeof(struct apfs_omap_key))
 			report(ctx, "wrong key size in info footer.");
@@ -1102,14 +1105,11 @@ static void check_btree_footer(struct btree *btree)
 					sizeof(struct apfs_omap_val))
 			report(ctx, "wrong value size in info footer.");
 
-		if (le32_to_cpu(info->bt_longest_key) !=
-					sizeof(struct apfs_omap_key))
+		/* Containers with no volumes do exist */
+		if ((longest_key || btree->key_count) && longest_key != sizeof(struct apfs_omap_key))
 			report(ctx, "wrong maximum key size in info footer.");
-
-		if (le32_to_cpu(info->bt_longest_val) !=
-					sizeof(struct apfs_omap_val))
+		if ((longest_val || btree->key_count) && longest_val != sizeof(struct apfs_omap_val))
 			report(ctx, "wrong maximum value size in info footer.");
-
 		return;
 	}
 
@@ -1205,6 +1205,11 @@ struct free_queue *parse_free_queue_btree(u64 oid, int index)
 		system_error();
 	btree = &sfq->sfq_btree;
 	sfq->sfq_index = index;
+
+	if (oid == 0) {
+		/* I've seen null fq's in fresh containers with no volumes */
+		return sfq;
+	}
 
 	btree->type = BTREE_TYPE_FREE_QUEUE;
 	btree->omap_table = NULL; /* These are ephemeral objects */
@@ -1393,7 +1398,7 @@ struct btree *parse_omap_btree(u64 oid)
 	parse_subtree(omap->root, &last_key, NULL /* name_buf */);
 
 	check_btree_footer(omap);
-	munmap(raw, sb->s_blocksize);
+	munmap(raw, obj.size);
 	return omap;
 }
 

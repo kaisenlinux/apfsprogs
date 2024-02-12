@@ -306,7 +306,7 @@ static void check_efi_information(u64 oid)
 	if (file_length <= (block_count - 1) * sb->s_blocksize)
 		report("EFI info", "wasted space in driver extents.");
 
-	munmap(efi, sb->s_blocksize);
+	munmap(efi, obj.size);
 }
 
 /**
@@ -522,12 +522,27 @@ static void check_volume_role(u16 role)
 		report("Volume superblock", "reserved role in use.");
 }
 
+static bool meta_crypto_is_empty(struct apfs_wrapped_meta_crypto_state *wmcs)
+{
+	if (wmcs->major_version || wmcs->minor_version || wmcs->cpflags)
+		return false;
+	if (wmcs->persistent_class || wmcs->key_os_version)
+		return false;
+	if (wmcs->key_revision || wmcs->unused)
+		return false;
+	return true;
+}
+
 /**
  * check_meta_crypto - Check a volume's meta_crypto field
  * @wmcs: the structure to check
  */
 static void check_meta_crypto(struct apfs_wrapped_meta_crypto_state *wmcs)
 {
+	/* This seems to contradict the reference, but it happens sometimes */
+	if (meta_crypto_is_empty(wmcs))
+		return;
+
 	if (le16_to_cpu(wmcs->major_version) != APFS_WMCS_MAJOR_VERSION)
 		report("Volume meta_crypto", "wrong major version.");
 	if (le16_to_cpu(wmcs->minor_version) != APFS_WMCS_MINOR_VERSION)
@@ -701,7 +716,7 @@ static void parse_integrity_meta(u64 oid)
 			report("Integrity metadata", "reserved field is in use.");
 	}
 
-	munmap(meta, sb->s_blocksize);
+	munmap(meta, obj.size);
 }
 
 /**
@@ -851,15 +866,10 @@ static struct apfs_superblock *map_volume_super(int vol,
 	u64 vol_id;
 
 	vol_id = le64_to_cpu(msb_raw->nx_fs_oid[vol]);
-	if (vol_id == 0) {
-		if (vol > sb->s_max_vols)
-			report("Container superblock", "too many volumes.");
-		for (++vol; vol < APFS_NX_MAX_FILE_SYSTEMS; ++vol)
-			if (msb_raw->nx_fs_oid[vol])
-				report("Container superblock",
-				       "volume array goes on after NULL.");
+	if (vol_id == 0)
 		return NULL;
-	}
+	if (vol > sb->s_max_vols)
+		report("Container superblock", "too many volumes.");
 
 	vsb->v_raw = read_object(vol_id, sb->s_omap_table, &vsb->v_obj);
 	read_volume_super(vol, vsb, &vsb->v_obj);
@@ -941,7 +951,7 @@ static void check_snap_meta_ext(u64 oid)
 	if (vsb->v_in_snapshot && le64_to_cpu(sme->sme_snap_xid) != sb->s_xid)
 		report("Extended snapshot metadata", "wrong transaction id.");
 
-	munmap(sme, sb->s_blocksize);
+	munmap(sme, obj.size);
 }
 
 /**
@@ -1067,8 +1077,14 @@ static void check_container(struct super_block *sb)
 
 		vsb_raw = map_volume_super(vol, vsb);
 		if (!vsb_raw) {
+			/*
+			 * Containers typically have all of their volumes at the
+			 * beginning of the array, but I've encountered images
+			 * where this isn't true. I guess it makes sense if
+			 * volumes can be deleted?
+			 */
 			free(vsb);
-			break;
+			continue;
 		}
 		if (vsb->v_obj.oid == sb->s_reaper_fs_id)
 			reaper_vol_seen = true;
@@ -1202,12 +1218,16 @@ static void parse_cpoint_map(struct apfs_checkpoint_mapping *raw)
 		report("Checkpoint map", "invalid physical address.");
 	map->m_paddr = le64_to_cpu(raw->cpm_paddr);
 
-	map->m_size = le32_to_cpu(raw->cpm_size);
-	if (map->m_size != sb->s_blocksize)
-		report_unknown("Ephemeral objects with more than one block");
-
 	map->m_type = le32_to_cpu(raw->cpm_type);
 	map->m_subtype = le32_to_cpu(raw->cpm_subtype);
+
+	map->m_size = le32_to_cpu(raw->cpm_size);
+	if (map->m_size & (sb->s_blocksize - 1))
+		report("Checkpoint map", "size isn't multiple of block size.");
+	if ((map->m_type & APFS_OBJECT_TYPE_MASK) != APFS_OBJECT_TYPE_SPACEMAN) {
+		if (map->m_size != sb->s_blocksize)
+			report_unknown("Large non-spaceman ephemeral objects");
+	}
 
 	if (raw->cpm_pad)
 		report("Checkpoint map", "non-zero padding.");
@@ -1245,7 +1265,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 		u32 flags;
 		int i;
 
-		raw = read_object_nocheck(bno, &obj);
+		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (obj.oid != bno)
 			report("Checkpoint map", "wrong object id.");
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_PHYSICAL)
@@ -1271,7 +1291,7 @@ static u32 parse_cpoint_map_blocks(u64 desc_base, u32 desc_blocks, u32 *index)
 
 		flags = le32_to_cpu(raw->cpm_flags);
 
-		munmap(raw, sb->s_blocksize);
+		munmap(raw, obj.size);
 		blk_count++;
 		*index = (*index + 1) % desc_blocks;
 
@@ -1348,7 +1368,7 @@ void parse_filesystem(void)
 		valid_blocks -= map_blocks;
 
 		bno = desc_base + index;
-		raw = read_object_nocheck(bno, &obj);
+		raw = read_object_nocheck(bno, sb->s_blocksize, &obj);
 		if (parse_object_flags(obj.flags, false) != APFS_OBJ_EPHEMERAL)
 			report("Checkpoint superblock", "bad storage type.");
 		if (obj.type != APFS_OBJECT_TYPE_NX_SUPERBLOCK)
@@ -1445,7 +1465,7 @@ static struct object *parse_reaper(u64 oid)
 			report_unknown("Nonempty reaper list");
 		/* TODO: nrl_free? */
 
-		munmap(list_raw, sb->s_blocksize);
+		munmap(list_raw, list.size);
 	} else {
 		if (raw->nr_completed_id || raw->nr_head || raw->nr_rlcount || raw->nr_type)
 			report("Reaper", "should be empty.");
@@ -1469,6 +1489,6 @@ static struct object *parse_reaper(u64 oid)
 	if (flags & APFS_NR_CONTINUE)
 		report_unknown("Object being reaped");
 
-	munmap(raw, sb->s_blocksize);
+	munmap(raw, reaper->size);
 	return reaper;
 }
