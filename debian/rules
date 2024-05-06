@@ -12,5 +12,5 @@ override_dh_auto_install:
 	install -p -m 0755 $(CURDIR)/apfsck/apfsck $(CURDIR)/debian/apfsprogs/usr/sbin/apfsck
 	install -p -m 0755 $(CURDIR)/mkapfs/mkapfs $(CURDIR)/debian/apfsprogs/usr/sbin/mkapfs
 	install -p -m 0755 $(CURDIR)/apfs-snap/apfs-snap $(CURDIR)/debian/apfsprogs/usr/bin/apfs-snap
-	ln -s /usr/sbin/apfsck $(CURDIR)/debian/apfsprogs/usr/sbin/fsck.apfs
-	ln -s /usr/sbin/mkapfs $(CURDIR)/debian/apfsprogs/usr/sbin/mkfs.apfs
+	ln -sf /usr/sbin/apfsck $(CURDIR)/debian/apfsprogs/usr/sbin/fsck.apfs
+	ln -sf /usr/sbin/mkapfs $(CURDIR)/debian/apfsprogs/usr/sbin/mkfs.apfs
