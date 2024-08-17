@@ -1,3 +1,9 @@
+apfsprogs (20240818-1kaisen) kaisen-packages; urgency=medium
+
+  * Import new Git commits
+
+ -- Kevin Chevreuil - Kaisen <kaisen@kaisenlinux.org>  Sun, 18 Aug 2024 00:57:51 +0200
+
 apfsprogs (20240506-1kaisen) kaisen-packages; urgency=medium
 
   * Import new Git commits
