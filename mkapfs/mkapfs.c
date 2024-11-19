@@ -16,7 +16,8 @@
 #include "super.h"
 #include "version.h"
 
-int fd;
+int fd_main = -1;
+int fd_tier2 = -1;
 struct parameters *param;
 static char *progname;
 
@@ -26,10 +27,10 @@ static char *progname;
 static void usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-L label] [-U UUID] [-u UUID] [-sv] "
+		"usage: %s [-L label] [-U UUID] [-u UUID] [-F tier2] [-B tier2-blocks] [-sv] "
 		"device [blocks]\n",
 		progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -37,11 +38,13 @@ static void usage(void)
  */
 static void version(void)
 {
-	if (*GIT_COMMIT)
+	if (*GIT_COMMIT) {
 		printf("mkapfs %s\n", GIT_COMMIT);
-	else
+		exit(EXIT_SUCCESS);
+	} else {
 		printf("mkapfs - unknown git commit id\n");
-	exit(1);
+		exit(EXIT_FAILURE);
+	}
 }
 
 /**
@@ -50,7 +53,7 @@ static void version(void)
 __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -60,27 +63,40 @@ __attribute__((noreturn)) void system_error(void)
 __attribute__((noreturn)) void fatal(const char *message)
 {
 	fprintf(stderr, "%s: %s\n", progname, message);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
- * get_device_size - Get the block count of the device or image being formatted
- * @blocksize: the filesystem blocksize
+ * get_device_size - Get the block count for a given device or image
+ * @device_fd:	file descriptor for the device
+ * @blocksize:	the filesystem blocksize
  */
-static u64 get_device_size(unsigned int blocksize)
+static u64 get_device_size(int device_fd, unsigned int blocksize)
 {
 	struct stat buf;
 	u64 size;
 
-	if (fstat(fd, &buf))
+	if (fstat(device_fd, &buf))
 		system_error();
 
 	if ((buf.st_mode & S_IFMT) == S_IFREG)
 		return buf.st_size / blocksize;
 
-	if (ioctl(fd, BLKGETSIZE64, &size))
+	if (ioctl(device_fd, BLKGETSIZE64, &size))
 		system_error();
 	return size / blocksize;
+}
+
+static u64 get_main_device_size(unsigned int blocksize)
+{
+	return get_device_size(fd_main, blocksize);
+}
+
+static u64 get_tier2_device_size(unsigned int blocksize)
+{
+	if (fd_tier2 == -1)
+		return 0;
+	return get_device_size(fd_tier2, blocksize);
 }
 
 /**
@@ -125,22 +141,28 @@ static char *get_random_uuid(void)
  */
 static void complete_parameters(void)
 {
-	u64 dev_block_count;
+	u64 main_blkcnt_limit, tier2_blkcnt_limit;
 
 	if (!param->blocksize)
 		param->blocksize = APFS_NX_DEFAULT_BLOCK_SIZE;
 
-	dev_block_count = get_device_size(param->blocksize);
-	if (!param->block_count)
-		param->block_count = dev_block_count;
-	if (param->block_count > dev_block_count) {
-		fprintf(stderr, "%s: device is not big enough\n", progname);
-		exit(1);
-	}
-	if (param->block_count * param->blocksize < 512 * 1024) {
-		fprintf(stderr, "%s: such tiny containers are not supported\n",
-			progname);
-		exit(1);
+	main_blkcnt_limit = get_main_device_size(param->blocksize);
+	tier2_blkcnt_limit = get_tier2_device_size(param->blocksize);
+	if (!param->main_blkcnt)
+		param->main_blkcnt = main_blkcnt_limit;
+	if (!param->tier2_blkcnt)
+		param->tier2_blkcnt = tier2_blkcnt_limit;
+	if (param->main_blkcnt > main_blkcnt_limit)
+		fatal("main device is not big enough");
+	if (param->tier2_blkcnt > tier2_blkcnt_limit)
+		fatal("tier 2 device is not big enough");
+	param->block_count = param->main_blkcnt + param->tier2_blkcnt;
+
+	if (param->main_blkcnt * param->blocksize < 512 * 1024)
+		fatal("such tiny containers are not supported");
+	if (param->tier2_blkcnt && param->tier2_blkcnt * param->blocksize < 512 * 1024) {
+		/* TODO: is this really a problem for tier 2? */
+		fatal("tier 2 is too small");
 	}
 
 	/* Every volume must have a label; use the same default as Apple */
@@ -148,15 +170,15 @@ static void complete_parameters(void)
 		param->label = "untitled";
 
 	/* Make sure the volume label fits, along with its null termination */
-	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN) {
-		fprintf(stderr, "%s: volume label is too long\n", progname);
-		exit(1);
-	}
+	if (strlen(param->label) + 1 > APFS_VOLNAME_LEN)
+		fatal("volume label is too long");
 
 	if (!param->main_uuid)
 		param->main_uuid = get_random_uuid();
 	if (!param->vol_uuid)
 		param->vol_uuid = get_random_uuid();
+	if (fd_tier2 != -1)
+		param->fusion_uuid = get_random_uuid();
 }
 
 int main(int argc, char *argv[])
@@ -169,7 +191,7 @@ int main(int argc, char *argv[])
 		system_error();
 
 	while (1) {
-		int opt = getopt(argc, argv, "L:U:u:szv");
+		int opt = getopt(argc, argv, "L:U:u:szvF:B:");
 
 		if (opt == -1)
 			break;
@@ -192,6 +214,15 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			version();
+		case 'F':
+			fd_tier2 = open(optarg, O_RDWR);
+			if (fd_tier2 == -1)
+				system_error();
+			break;
+		case 'B':
+			/* TODO: reject malformed numbers */
+			param->tier2_blkcnt = atoll(optarg);
+			break;
 		default:
 			usage();
 		}
@@ -200,15 +231,15 @@ int main(int argc, char *argv[])
 	if (optind == argc - 2) {
 		filename = argv[optind];
 		/* TODO: reject malformed numbers? */
-		param->block_count = atoll(argv[optind + 1]);
+		param->main_blkcnt = atoll(argv[optind + 1]);
 	} else if (optind == argc - 1) {
 		filename = argv[optind];
 	} else {
 		usage();
 	}
 
-	fd = open(filename, O_RDWR);
-	if (fd == -1)
+	fd_main = open(filename, O_RDWR);
+	if (fd_main == -1)
 		system_error();
 	complete_parameters();
 

@@ -13,7 +13,8 @@
 #include "super.h"
 #include "version.h"
 
-int fd;
+int fd_main;
+int fd_tier2 = -1;
 unsigned int options;
 static bool weird_state;
 static char *progname;
@@ -23,8 +24,8 @@ static char *progname;
  */
 static void usage(void)
 {
-	fprintf(stderr, "usage: %s [-cuvw] device\n", progname);
-	exit(1);
+	fprintf(stderr, "usage: %s [-cuvw] [-F tier2] device\n", progname);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -32,11 +33,13 @@ static void usage(void)
  */
 static void version(void)
 {
-	if (*GIT_COMMIT)
+	if (*GIT_COMMIT) {
 		printf("apfsck %s\n", GIT_COMMIT);
-	else
+		exit(EXIT_SUCCESS);
+	} else {
 		printf("apfsck - unknown git commit id\n");
-	exit(1);
+		exit(EXIT_FAILURE);
+	}
 }
 
 /**
@@ -45,7 +48,7 @@ static void version(void)
 __attribute__((noreturn)) void system_error(void)
 {
 	perror(progname);
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -69,7 +72,7 @@ __attribute__((noreturn, format(printf, 2, 3)))	void report(const char *context,
 	else
 		printf("%s\n", buf);
 
-	exit(1);
+	exit(EXIT_FAILURE);
 }
 
 /**
@@ -123,7 +126,7 @@ int main(int argc, char *argv[])
 
 	progname = argv[0];
 	while (1) {
-		int opt = getopt(argc, argv, "cuvw");
+		int opt = getopt(argc, argv, "cuvwF:");
 
 		if (opt == -1)
 			break;
@@ -140,6 +143,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			version();
+		case 'F':
+			fd_tier2 = open(optarg, O_RDONLY);
+			if (fd_tier2 == -1)
+				system_error();
+			break;
 		default:
 			usage();
 		}
@@ -149,8 +157,8 @@ int main(int argc, char *argv[])
 		usage();
 	filename = argv[optind];
 
-	fd = open(filename, O_RDONLY);
-	if (fd == -1)
+	fd_main = open(filename, O_RDONLY);
+	if (fd_main == -1)
 		system_error();
 
 	parse_filesystem();
