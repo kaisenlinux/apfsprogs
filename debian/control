@@ -11,7 +11,7 @@ Vcs-Browser: https://gitlab.com/kaisenlinux/packages/apfsprogs
 Vcs-Git: https://gitlab.com/kaisenlinux/packages/apfsprogs.git
 
 Package: apfsprogs
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64
 Depends:
  ${shlibs:Depends},
  ${misc:Depends},
